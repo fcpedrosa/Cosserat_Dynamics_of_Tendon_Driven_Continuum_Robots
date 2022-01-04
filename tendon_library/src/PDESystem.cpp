@@ -60,7 +60,7 @@ void PDESystem::operator()(const blaze::StaticVector<double, 19UL + numTendons> 
     blaze::StaticMatrix<double, 3UL, 3UL> R = this->getSO3(h);
 
     // obtaining the BDG-alpha time discretization coefficient C0
-    double c0 = robot.m_time->getC0();    
+    double c0 = robot.m_time->getC0();
 
     // declaring auxiliar variables
     blaze::StaticVector<double, 3UL> a, a_i, b, pbs_i;
@@ -114,17 +114,38 @@ void PDESystem::operator()(const blaze::StaticVector<double, 19UL + numTendons> 
     blaze::subvector<3UL, 3UL>(rhs) = -b + blaze::cross(w, robot.m_rho * robot.m_J * w) + robot.m_rho * robot.m_J * w_t - blaze::cross(v, nb) - blaze::cross(u, mb) - robot.m_Bbt * us_h;
 
     // State differential equations
-    blaze::subvector<0UL, 3UL>(dyds) = R * v;                                           // p_s
-    blaze::subvector<3UL, 4UL>(dyds) = this->quaternionDiff(u, h);                      // h_s 
-    blaze::subvector<7UL, 6UL>(dyds) = blaze::solve(Phi, rhs);                          // v_s & u_s
-    blaze::subvector<13UL, 3UL>(dyds) = v_t - blaze::cross(u, q) + blaze::cross(w, v);  // q_s
-    blaze::subvector<16UL, 3UL>(dyds) = u_t - blaze::cross(u, w);                       // w_s
+    blaze::subvector<0UL, 3UL>(dyds) = R * v;                                          // p_s
+    blaze::subvector<3UL, 4UL>(dyds) = this->quaternionDiff(u, h);                     // h_s
+    blaze::subvector<7UL, 6UL>(dyds) = blaze::solve(Phi, rhs);                         // v_s & u_s
+    blaze::subvector<13UL, 3UL>(dyds) = v_t - blaze::cross(u, q) + blaze::cross(w, v); // q_s
+    blaze::subvector<16UL, 3UL>(dyds) = u_t - blaze::cross(u, w);                      // w_s
 
-    blaze::subvector<0UL, 3UL>(z) = v;                                  // v
-    blaze::subvector<3UL, 3UL>(z) = u;                                  // u
-    blaze::subvector<6UL, 3UL>(z) = q;                                  // q
-    blaze::subvector<9UL, 3UL>(z) = w;                                  // w
-    blaze::subvector<12UL, 6UL>(z) = blaze::subvector<7UL, 6UL>(dyds);  // v_s & u_s
+    blaze::subvector<0UL, 3UL>(z) = v;                                 // v
+    blaze::subvector<3UL, 3UL>(z) = u;                                 // u
+    blaze::subvector<6UL, 3UL>(z) = q;                                 // q
+    blaze::subvector<9UL, 3UL>(z) = w;                                 // w
+    blaze::subvector<12UL, 6UL>(z) = blaze::subvector<7UL, 6UL>(dyds); // v_s & u_s
+}
+
+// Integrates the PDE model equations using Euler's method
+template <std::size_t N, std::size_t numTendons>
+void PDESystem::euler_PDE(const blaze::StaticVector<double, 19UL + numTendons> &y0, double, 19UL + numTendons > &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
+{
+    blaze::col<0UL>(Y) = y0;
+    constexpr double ds = L / (N - 1);
+
+    // Euler's method
+    for (size_t i = 0UL; i < N - 1; ++i)
+    {
+        this->PDESystem(blaze::column(y, i), dyds, blaze::column(Z_h, i), blaze::column(Z, i), robot);
+        blaze::column(Y, i + 1) = blaze::column(Y, i) + ds * dyds;
+    }
+}
+
+// Integrates the ODE model equations using the classic 4th-order Runge-Kutta algorithm
+template <std::size_t N, std::size_t numTendons>
+void PDESystem::rungeKutta_PDE(const blaze::StaticVector<double, 19UL + numTendons> &y0, double, 19UL + numTendons > &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
+{
 }
 
 // function that returns a rotation matrix in SO(3) from a set of non-unity quaternions

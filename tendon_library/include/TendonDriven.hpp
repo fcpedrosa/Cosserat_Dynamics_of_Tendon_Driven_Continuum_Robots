@@ -114,7 +114,7 @@ private:
     std::unique_ptr<PDESystem<N, numTendons>> m_PDE;                    // implements the PDE state equations for a dynamic tendon-driven robot
     blaze::StaticMatrix<double, 19UL + numTendons, N> m_y;              // set of N state vectors
     blaze::StaticMatrix<double, 18UL, N> m_z, m_zh;                     // set of N
-    cosseratEquations m_eqnType;                                        // enum defining if ODE or PDE equations for solving BVP
+    cosseratEquations m_solType;                                        // enum defining if ODE or PDE equations for solving BVP
     rootFindingMethod m_method;                                         // enum defining which nonlinear root-finder to be used
-    float m_BVPAccuracy;                                                // accuracy of BVP solution
+    double m_BVPAccuracy;                                               // accuracy of BVP solution
 };

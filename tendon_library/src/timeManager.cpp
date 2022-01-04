@@ -106,7 +106,8 @@ void timeManager<N>::stepTime(const blaze::StaticVector<double, 12UL> &currentSt
 }
 
 // getter method for retrieving the dynamic actuation input profile for the tendons
-double timeManager::getDynamicActuationProfile()
+template<std::size_t N>
+double timeManager<N>::getDynamicActuationProfile()
 {
     /*
                     *** THE SIMULATION STARTS WITH THE LOWEST TENDON DISPLACEMENT (qL) ***

@@ -107,6 +107,52 @@ void ODESystem::operator()(const blaze::StaticVector<double, 19UL + numTendons> 
     blaze::subvector<12UL, 6UL>(z) = blaze::subvector<7UL, 6UL>(dyds);   // v_s & u_s
 }
 
+// Integrates the ODE model equations using Euler's method
+template <std::size_t N, std::size_t numTendons>
+void ODESystem::euler_ODE(const blaze::StaticVector<double, 19UL + numTendons>& y0, blaze::StaticMatrix<double, 19UL + numTendons, N>& Y, blaze::StaticVector<double, 19UL + numTendons>& dyds, blaze::StaticMatrix<double, 18UL + numTendons, N>& Z, const double L, tendonDriven &robot)
+{
+    blaze::col<0UL>(Y) = y0;
+    constexpr double ds = L / (N - 1);
+
+    // Euler's method
+    for(size_t i = 0UL; i < N - 1; ++i)
+    {
+        this->ODESystem(blaze::column(y, i), dyds, blaze::column(Z, i), robot);
+        blaze::column(Y, i + 1) = blaze::column(Y, i) + ds * dyds;
+    }
+}
+
+// Integrates the ODE model equations using the classic 4th-order Runge-Kutta algorithm
+template <std::size_t N, std::size_t numTendons>
+void ODESystem::rungeKutta_ODE(const blaze::StaticVector<double, 19UL + numTendons>& y0, blaze::StaticMatrix<double, 19UL + numTendons, N>& Y, blaze::StaticMatrix<double, 18UL + numTendons, N>& Z, const double L, tendonDriven &robot)
+{
+    blaze::column<0UL>(Y) = y0;
+
+    constexpr double ds = L / (N - 1);
+    constexpr double half_ds = ds / 2;
+    constexpr double sixth_ds = ds / 6;
+    
+    // 4th-order Runge-Kutta
+    blaze::StaticVector<double, 19UL + numTendons> k0, y1, k1, y2, k2, y3, k3;
+    double s = s0;
+    for(size_t i = 0UL; i < N-1; ++i){
+        y0 = Y.col(i);
+        k0 = ODE(s, y0);
+        s += half_ds;
+        y1 = Y.col(i) + k0*half_ds;
+        k1 = ODE(s, y1);
+        y2 = Y.col(i) + k1*half_ds;
+        k2 = ODE(s, y2);
+        s = s0 + (L*(i+1))/Nm1;
+        y3 = Y.col(i) + k2*ds;
+        k3 = ODE(s, y3);
+
+        Y.col(i+1) = Y.col(i) + (k0 + 2*(k1 + k2) + k3) * sixth_ds;
+    }
+
+    return Y;
+}
+
 // function that returns a rotation matrix in SO(3) from a set of non-unity quaternions
 template <std::size_t N, std::size_t numTendons>
 blaze::StaticMatrix<double, 3UL, 3UL> ODESystem::getSO3(const blaze::StaticVector<double, 4UL> &h)

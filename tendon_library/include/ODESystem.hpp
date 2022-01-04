@@ -28,7 +28,13 @@ class ODESystem {
 	ODESystem& operator=(ODESystem&& rhs) noexcept;
 
     // functor that implements the system of ODEs governing an N-tendon catheter
-    void operator()(const blaze::StaticVector<double, 19UL + numTendons>& y, blaze::StaticVector<double, 19UL + numTendons>& dyds, blaze::StaticVector<double, 12UL>& dydt);
+    void operator()(const blaze::StaticVector<double, 19UL + numTendons>& y, blaze::StaticVector<double, 19UL + numTendons>& dyds, blaze::StaticVector<double, 12UL>& dydt, const tendonDriven &robot);
+
+	// Integrates the ODE model equations using Euler's method
+	void euler_ODE(const blaze::StaticVector<double, 19UL + numTendons>& y0, blaze::StaticMatrix<double, 19UL + numTendons, N>& Y, blaze::StaticVector<double, 19UL + numTendons>& dyds, blaze::StaticMatrix<double, 18UL + numTendons, N>& Z, const double L, tendonDriven &robot);
+
+	// Integrates the ODE model equations using the classic 4th-order Runge-Kutta algorithm
+	void rungeKutta_ODE(const blaze::StaticVector<double, 19UL + numTendons>& y0, blaze::StaticMatrix<double, 19UL + numTendons, N>& Y, blaze::StaticMatrix<double, 18UL + numTendons, N>& Z, tendonDriven &robot);
 
     // function that returns a rotation matrix in SO(3) from a set of non-unity quaternions
     blaze::StaticMatrix<double, 3UL, 3UL> getSO3(const blaze::StaticVector<double, 4UL>& h);
@@ -38,7 +44,6 @@ class ODESystem {
 
 	// function that computes the posmultiplication of a vector by the hat operator
 	blaze::StaticMatrix<double, 3UL, 3UL> hatPostultiply(const blaze::StaticVector<double, 3UL>& v1, const blaze::StaticVector<double, 3UL>& v2);
-
 
     private:
         blaze::StaticMatrix<double, 3UL, 3UL> m_R;    // rotation matrix SO(3) -- orientation of local frame wrt global frame
