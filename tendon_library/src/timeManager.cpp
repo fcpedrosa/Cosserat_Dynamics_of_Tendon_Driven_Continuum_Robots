@@ -7,7 +7,14 @@
 template<std::size_t N>
 timeManager<N>::timeManager()
 {
-    m_c0 = m_c1 = m_c2 = m_d1 = 0.0;
+    m_c0 = 0.0;
+    m_c1 = 0.0;
+    m_c2 = 0.0;
+    m_d1 = 0.0;
+    m_t = 0.0;
+    m_yLag1 = 0.0;
+    m_yLag2 = 0.0;
+    m_yTimeDot = 0.0;
 }
 
 // overloaded constructor
@@ -18,11 +25,12 @@ timeManager<N>::timeManager(const double alpha, const double dt)
     this->m_c1 = -2 / dt;
     this->m_c2 = (0.5 + alpha) / (dt * (1 + alpha));
     this->m_d1 = alpha / (1 + alpha);
+    m_t = 0.0;
 }
 
 // copy constructor
 template<std::size_t N>
-timeManager<N>::timeManager(const timeManager<N> &rhs) : m_c0(rhs.m_c0), m_c1(rhs.m_c1), m_c2(rhs.m_c2), m_d1(rhs.m_d1),
+timeManager<N>::timeManager(const timeManager<N> &rhs) : m_c0(rhs.m_c0), m_c1(rhs.m_c1), m_c2(rhs.m_c2), m_d1(rhs.m_d1), m_t(rhs.m_t),
                                                    m_yLag1(rhs.m_yLag1), m_yLag2(rhs.m_yLag2), m_yTimeDot(rhs.m_yTimeDot) {}
 
 // move constructor
@@ -36,6 +44,7 @@ timeManager<N>::timeManager(timeManager<N> &&rhs) noexcept
         this->m_c1 = rhs.m_c1;
         this->m_c2 = rhs.m_c2;
         this->m_d1 = rhs.m_d1;
+        this->m_t = rhs.m_t;
         this->m_yLag1 = std::move(rhs.m_yLag1);
         this->m_yLag2 = std::move(rhs.m_yLag2);
         this->m_yTimeDot = std::move(rhs.m_yTimeDot);
@@ -51,7 +60,7 @@ timeManager<N>::~timeManager()
 
 // copy assignment operator
 template<std::size_t N>
-timeManager &timeManager<N>::operator=(const timeManager<N> &rhs)
+timeManager<N> &timeManager<N>::operator=(const timeManager<N> &rhs)
 {
     // handling self-assignment
     if (this != &rhs)
@@ -60,6 +69,7 @@ timeManager &timeManager<N>::operator=(const timeManager<N> &rhs)
         this->m_c1 = rhs.m_c1;
         this->m_c2 = rhs.m_c2;
         this->m_d1 = rhs.m_d1;
+        this->m_t = rhs.m_t;
         this->m_yLag1 = rhs.m_yLag1;
         this->m_yLag2 = rhs.m_yLag2;
         this->m_yTimeDot = rhs.m_yTimeDot;
@@ -70,7 +80,7 @@ timeManager &timeManager<N>::operator=(const timeManager<N> &rhs)
 
 // move assignment operator
 template<std::size_t N>
-timeManager &timeManager<N>::operator=(timeManager<N> &&rhs) noexcept
+timeManager<N> &timeManager<N>::operator=(timeManager<N> &&rhs) noexcept
 {
     // handling self-assignment
     if (this != &rhs)
@@ -79,6 +89,7 @@ timeManager &timeManager<N>::operator=(timeManager<N> &&rhs) noexcept
         this->m_c1 = rhs.m_c1;
         this->m_c2 = rhs.m_c2;
         this->m_d1 = rhs.m_d1;
+        this->m_t = rhs.m_t;
         this->m_yLag1 = std::move(rhs.m_yLag1);
         this->m_yLag2 = std::move(rhs.m_yLag2);
         this->m_yTimeDot = std::move(rhs.m_yTimeDot);
@@ -96,8 +107,9 @@ double timeManager<N>::getC0()
 
 // method for stepping time (updates the backward time differentiation)
 template<std::size_t N>
-void timeManager<N>::stepTime(const blaze::StaticVector<double, 12UL> &currentState)
+void timeManager<N>::stepTime(const blaze::StaticVector<double, 12UL> &currentState, const double& dt)
 {
+    m_t += dt;
     // updates the time derivative of the state vector
     this->m_yTimeDot = (this->m_c0 * currentState) + (this->m_c1 * this->m_yLag1) + (this->m_c2 * this->m_yLag2) + (this->m_d1 * this->m_yTimeDot);
     // updates the lagged state vectors

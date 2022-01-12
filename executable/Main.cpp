@@ -26,11 +26,11 @@ int main()
 	double beta = 0.0;					// length of tendons retracted within the actuation unit due to revolute actuator [m]
 	double alpha = 0.0;					// backward differentiation parameter BDF-alpha
 
-	double tendonCompliance = 1.6e-3;	// tendon compliance to tensile forces
-	blaze::DiagonalMatrix<blaze::StaticMatrix<double, 3UL, 3UL>> Bse, Bbt, C;
-	blaze::diagonal(Bse) = { 0.0, 0.0, 0.0 };
-	blaze::diagonal(Bbt) = { 5.0e-4, 5.0e-4, 5.0e-4 };
-	blaze::diagonal(C) = { 1.0e-4, 1.0e-4, 1.0e-4 };
+	double tendonCompliance = 1.6e-3;	// tendon compliance to tensile forces -- MADE EQUAL FOR ALL TENDONS
+	
+
+	// instantiating a tendon-driven robot (4 tendons, 200 discretized arc-length points)
+	tendonDriven rbt<200UL, 4UL>();
 
 
 

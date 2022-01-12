@@ -12,8 +12,9 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)
 
 # addind the library and main executable directories to the project tree
-add_subdirectory(tendon_library) # static tendon-Driven library
-add_subdirectory(executable)     # main executable
+add_subdirectory(tendon_library)  # static tendon-Driven library
+add_subdirectory(gnuplot_library) # gnuplot for displaying robot shape
+add_subdirectory(executable)      # main executable
 
 # set(Boost_USE_STATIC_LIBS        ON)  # only find static libs
 # set(Boost_USE_DEBUG_LIBS        OFF)  # ignore debug libs and

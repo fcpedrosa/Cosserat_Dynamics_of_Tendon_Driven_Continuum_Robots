@@ -18,6 +18,9 @@
 #include <memory>
 #include <execution>
 #include <iostream>
+#include "timeManager.hpp"
+#include "ODESystem.hpp"
+#include "PDESystem.hpp"
 
 // enumeration for defining which set of equations to be used (static or dynamic solutions)
 enum class cosseratEquations { STATIC_SOLUTION, DYNAMIC_SOLUTION };
@@ -34,7 +37,7 @@ public:
     TendonDriven() = delete;
 
     // overloaded constructor
-    TendonDriven(double E, double rad, double mass, double rho, double L, double beta, double T, double dt, double alpha, double tendonOffset, blaze::StaticVector<double, 3UL> g = {0.0, 0.0, -9.81});
+    TendonDriven(double E, double G, double rad, double mass, double L, double alpha, double T, double dt, double tendonOffset, double tendonCompliance, double basePlateToMotor, double dampBendTwist, double dampShearExt, double dragCoeff);
 
     // copy constructor
     TendonDriven(const TendonDriven &rhs);
@@ -55,7 +58,7 @@ public:
     blaze::StaticVector<double, 6UL + numTendons> residueFunction(const blaze::StaticVector<double, 6UL + numTendons> &initGuess);
 
     // function that computes the finite-differences Jacobian for solving the BVP
-	blaze::StaticMatrix<double, 6UL + numTendons, 6UL + numTendons> jac_BVP(const blaze::StaticVector<double, 5UL> &initGuess, const blaze::StaticVector<double, 6UL + numTendons> &residue);
+	blaze::StaticMatrix<double, 6UL + numTendons, 6UL + numTendons> jac_BVP(const blaze::StaticVector<double, 6UL + numTendons> &initGuess, const blaze::StaticVector<double, 6UL + numTendons> &residue);
 
 	// function that computes the finite-differences Jacobian wrt actuation inputs
 	blaze::StaticMatrix<double, 3UL, 6UL> jacobian(const blaze::StaticVector<double, 6UL + numTendons> &initGuess, const blaze::StaticVector<double, 3UL> &tipPos);
@@ -79,7 +82,7 @@ public:
     bool Modified_Newton_Raphson(blaze::StaticVector<double, 6UL + numTendons> &initGuess);
 
     // method for computing the Penrose Pseudoinverse via SVD decomposition
-    blaze::HybridMatrix<double, 6UL, 6UL> TendonDriven<N, numTendons>::pInv(const blaze::HybridMatrix<double, 6UL + numTendons, 6UL + numTendons> &M)
+    blaze::HybridMatrix<double, 6UL + numTendons, 6UL + numTendons> TendonDriven<N, numTendons>::pInv(const blaze::HybridMatrix<double, 6UL + numTendons, 6UL + numTendons> &M)
 
     // defining friend classes
     friend class ODESystem;
@@ -87,13 +90,14 @@ public:
 
 private:
     double m_E;                                                         // Young's modulus [GPa]
+    double m_G;                                                         // Shear modulus
     double m_rad;                                                       // backbone radius [m]
     double m_A;                                                         // cross-sectional area [m^2]
     double m_mass;                                                      // total mass (backbone + disks) [kg]
     double m_rho;                                                       // material density [kgm^-3]
     blaze::StaticVector<double, 3UL> m_g;                               // acceleration of gravity [m/s^2]
     double m_L;                                                         // backbone total length [m]
-    double m_beta;                                                      // length of tendons retracted within the actuation unit due to revolute actuator [m]
+    // double m_beta;                                                   // length of tendons retracted within the actuation unit due to revolute actuator [m]
     double m_T, m_dt;                                                   // total time horizon & time step for dynamics simulation [s]
     double m_alpha;                                                     // backward differentiation parameter (BDF_alpha)
     double m_tendonOffset;                                              // offset distance between the tendons and backbone [m]
@@ -108,7 +112,7 @@ private:
     blaze::DiagonalMatrix<blaze::StaticMatrix<double, 3UL, 3UL>> m_Kbt; // stiffness matrix for bending & torsion [Nm^2]
     blaze::DiagonalMatrix<blaze::StaticMatrix<double, 3UL, 3UL>> m_J;   // second mass moment of inertia tensor [m^4]
     std::array<blaze::StaticVector<double, 3UL>, numTendons> m_r;       // array of vectors describing the radial position of each tendon
-    std::array<blaze::StaticVector<double, 3UL>, numTendons> m_p;       // array of vectors describing the shape of each tendon
+    // std::array<blaze::StaticMatrix<double, 3UL, N>, numTendons> m_p;    // array of vectors describing the shape of each tendon
     std::unique_ptr<timeManager> m_time;                                // implements the time manager for dynamics simulation
     std::unique_ptr<ODESystem<N, numTendons>> m_ODE;                    // implements the ODE state equations for a static tendon-driven robot (steady-state)
     std::unique_ptr<PDESystem<N, numTendons>> m_PDE;                    // implements the PDE state equations for a dynamic tendon-driven robot

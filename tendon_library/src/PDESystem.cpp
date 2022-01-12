@@ -4,50 +4,96 @@
 
 // default constructor
 template <std::size_t N, std::size_t numTendons>
-PDESystem::PDESystem()
+PDESystem<N, numTendons>::PDESystem()
 {
+    m_u = 0.0;
+    m_v = 0.0;
+    m_h = {1.0, 0.0, 0.0, 0.0};
+    m_R = this->getSO3(this->m_h);
+    m_Phi = 0.0;
+    m_us = 0.0;
+    m_vs = 0.0;
 }
 
 // overloaded constructor
 template <std::size_t N, std::size_t numTendons>
-PDESystem::PDESystem(blaze::StaticVector<double, 3UL> u, blaze::StaticVector<double, 3UL> v, blaze::StaticVector<double, 4UL> h)
+PDESystem<N, numTendons>::PDESystem(blaze::StaticVector<double, 3UL> u, blaze::StaticVector<double, 3UL> v, blaze::StaticVector<double, 4UL> h) : m_u(u), m_v(v), m_h(h)
 {
+    m_R = this->getSO3(this->m_h);
+    m_Phi = 0.0;
+    m_us = 0.0;
+    m_vs = 0.0;
 }
 
 // copy constructor
 template <std::size_t N, std::size_t numTendons>
-PDESystem::PDESystem(const PDESystem &rhs)
-{
-}
+PDESystem<N, numTendons>::PDESystem(const PDESystem &rhs) : m_u(rhs.m_u), m_v(rhs.m_v), m_h(rhs.m_h), m_R(rhs.m_R), m_Phi(rhs.m_Phi), m_us(rhs.m_us), m_vs(rhs.m_vs) {}
 
 // move constructor
 template <std::size_t N, std::size_t numTendons>
-PDESystem::PDESystem(PDESystem &&rhs) noexcept
+PDESystem<N, numTendons>::PDESystem(PDESystem &&rhs) noexcept
 {
+    // handling self-assignment
+    if (this != &rhs)
+    {
+        this->m_u = std::move(rhs.m_u);
+        this->m_v = std::move(rhs.m_v);
+        this->m_h = std::move(rhs.m_h);
+        this->m_R = std::move(rhs.m_R);
+        this->m_Phi = std::move(rhs.m_Phi);
+        this->m_us = std::move(rhs.m_us);
+        this->m_vs = std::move(rhs.m_vs);
+    }
 }
 
 // CTR destructor
 template <std::size_t N, std::size_t numTendons>
-PDESystem::~PDESystem()
+PDESystem<N, numTendons>::~PDESystem()
 {
     // nothing to be done
 }
 
 // copy assignment operator
 template <std::size_t N, std::size_t numTendons>
-PDESystem &PDESystem::operator=(const PDESystem &rhs)
+PDESystem<N, numTendons> &PDESystem<N, numTendons>::operator=(const PDESystem<N, numTendons> &rhs)
 {
+    // handling self-assignment
+    if (this != &rhs)
+    {
+        this->m_u = rhs.m_u;
+        this->m_v = rhs.m_v;
+        this->m_h = rhs.m_h;
+        this->m_R = rhs.m_R;
+        this->m_Phi = rhs.m_Phi;
+        this->m_us = rhs.m_us;
+        this->m_vs = rhs.m_vs;
+    }
+
+    return *this;
 }
 
 // move assignment operator
 template <std::size_t N, std::size_t numTendons>
-PDESystem &PDESystem::operator=(PDESystem &&rhs) noexcept
+PDESystem<N, numTendons> &PDESystem<N, numTendons>::operator=(PDESystem<N, numTendons> &&rhs) noexcept
 {
+    // handling self-assignment
+    if (this != &rhs)
+    {
+        this->m_u = std::move(rhs.m_u);
+        this->m_v = std::move(rhs.m_v);
+        this->m_h = std::move(rhs.m_h);
+        this->m_R = std::move(rhs.m_R);
+        this->m_Phi = std::move(rhs.m_Phi);
+        this->m_us = std::move(rhs.m_us);
+        this->m_vs = std::move(rhs.m_vs);
+    }
+
+    return *this;
 }
 
 // functor that implements the system of PDEs governing an N-tendon catheter
 template <std::size_t N, std::size_t numTendons>
-void PDESystem::operator()(const blaze::StaticVector<double, 19UL + numTendons> &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
+void PDESystem<N, numTendons>::operator()(const blaze::StaticVector<double, 19UL + numTendons> &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
 {
     // dyds := [ps, hs, vs, us, qs, ws, numTendons] ==>> First spatial derivative of the (19+numTendons)-dimensional state vector
     // zh := [vh uh qh wh]  ==>> history terms for the time implicit discretization
@@ -129,7 +175,7 @@ void PDESystem::operator()(const blaze::StaticVector<double, 19UL + numTendons> 
 
 // Integrates the PDE model equations using Euler's method
 template <std::size_t N, std::size_t numTendons>
-void PDESystem::euler_PDE(const blaze::StaticVector<double, 19UL + numTendons> &y0, double, 19UL + numTendons > &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
+void PDESystem<N, numTendons>::euler_PDE(const blaze::StaticVector<double, 19UL + numTendons> &y0, double, 19UL + numTendons > &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
 {
     blaze::col<0UL>(Y) = y0;
     constexpr double ds = L / (N - 1);
@@ -144,13 +190,13 @@ void PDESystem::euler_PDE(const blaze::StaticVector<double, 19UL + numTendons> &
 
 // Integrates the ODE model equations using the classic 4th-order Runge-Kutta algorithm
 template <std::size_t N, std::size_t numTendons>
-void PDESystem::rungeKutta_PDE(const blaze::StaticVector<double, 19UL + numTendons> &y0, double, 19UL + numTendons > &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
+void PDESystem<N, numTendons>::rungeKutta_PDE(const blaze::StaticVector<double, 19UL + numTendons> &y0, double, 19UL + numTendons > &y, blaze::StaticVector<double, 19UL + numTendons> &dyds, const blaze::StaticVector<double, 18UL> &z_h, blaze::StaticVector<double, 18UL> &z, const tendonDriven &robot)
 {
 }
 
 // function that returns a rotation matrix in SO(3) from a set of non-unity quaternions
 template <std::size_t N, std::size_t numTendons>
-blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::getSO3(const blaze::StaticVector<double, 4UL> &h)
+blaze::StaticMatrix<double, 3UL, 3UL> PDESystem<N, numTendons>::getSO3(const blaze::StaticVector<double, 4UL> &h)
 {
     blaze::IdentityMatrix<double> I(3UL);
     blaze::StaticMatrix<double, 3UL, 3UL> R;
@@ -167,7 +213,7 @@ blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::getSO3(const blaze::StaticVecto
 
 // function that computes the squared hat operator
 template <std::size_t N, std::size_t numTendons>
-blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::hatSqr(const blaze::StaticVector<double, 3UL> &v)
+blaze::StaticMatrix<double, 3UL, 3UL> PDESystem<N, numTendons>::hatSqr(const blaze::StaticVector<double, 3UL> &v)
 {
     blaze::StaticMatrix<double, 3UL, 3UL> hatSqr = {{-v[2UL] * v[2UL] - v[1UL] * v[1UL], v[1UL] * v[0UL]},
                                                     {v[0UL] * v[1UL], -v[2UL] * v[2UL] - v[0UL] * v[0UL], v[2UL] * v[1UL]},
@@ -178,7 +224,7 @@ blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::hatSqr(const blaze::StaticVecto
 
 // function that computes the premultiplication of a vector by the hat operator
 template <std::size_t N, std::size_t numTendons>
-blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::hatPreMultiply(const blaze::StaticVector<double, 3UL> &v, const blaze::StaticMatrix<double, 3UL 3UL> &M)
+blaze::StaticMatrix<double, 3UL, 3UL> PDESystem<N, numTendons>::hatPreMultiply(const blaze::StaticVector<double, 3UL> &v, const blaze::StaticMatrix<double, 3UL 3UL> &M)
 {
     blaze::StaticMatrix<double, 3UL, 3UL> Res = {{-M(1UL, 0UL) * v[2UL] + M(2UL, 0UL) * v[1UL], -M(1UL, 1UL) * v[2UL] + M(2UL, 1UL) * v[1UL], -M(1UL, 2UL) * v[2UL] + M(2UL, 2UL) * v[1UL]},
                                                  {M(0UL, 0UL) * v[2UL] - M(2UL, 0UL) * v[0UL], M(0UL, 1UL) * v[2UL] - M(2UL, 1UL) * v[0UL], M(0UL, 2UL) * v[2UL] - M(2UL, 2UL) * v[0UL]},
@@ -189,7 +235,7 @@ blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::hatPreMultiply(const blaze::Sta
 
 // function that computes the posmultiplication of a vector by the hat operator
 template <std::size_t N, std::size_t numTendons>
-blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::hatPostMultiply(const blaze::StaticMatrix<double, 3UL 3UL> &M, const blaze::StaticVector<double, 3UL> &v)
+blaze::StaticMatrix<double, 3UL, 3UL> PDESystem<N, numTendons>::hatPostMultiply(const blaze::StaticMatrix<double, 3UL 3UL> &M, const blaze::StaticVector<double, 3UL> &v)
 {
     blaze::StaticMatrix<double, 3UL, 3UL> Res = {{M(0UL, 1UL) * v[2UL] - M(0UL, 2UL) * v[1UL], -M(0UL, 0UL) * v[2UL] + M(0UL, 2UL) * v[0UL], M(0UL, 0UL) * v[1UL] - M(0UL, 1UL) * v[0UL]},
                                                  {M(1UL, 1UL) * v[2UL] - M(1UL, 2UL) * v[1UL], -M(1UL, 0UL) * v[2UL] + M(1UL, 2UL) * v[0UL], M(1UL, 0UL) * v[1UL] - M(1UL, 1UL) * v[0UL]},
@@ -200,7 +246,7 @@ blaze::StaticMatrix<double, 3UL, 3UL> PDESystem::hatPostMultiply(const blaze::St
 
 // function that computes the differential quaternion evolution
 template <std::size_t N, std::size_t numTendons>
-blaze::StaticVector<double, 4UL> PDESystem::quaternionDiff(const blaze::StaticVector<double, 3UL> &u, const blaze::StaticVector<double, 4UL> &h)
+blaze::StaticVector<double, 4UL> PDESystem<N, numTendons>::quaternionDiff(const blaze::StaticVector<double, 3UL> &u, const blaze::StaticVector<double, 4UL> &h)
 {
     blaze::StaticMatrix<double, 4UL, 4UL> hs;
     hs = {{-u[0UL] * h[1UL] - u[1UL] * h[2UL] - u[2UL] * h[3UL]},

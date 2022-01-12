@@ -29,7 +29,7 @@ class timeManager {
     double getC0();
 
     // method for stepping time (updates the backward time differentiation)
-    void stepTime(const blaze::StaticVector<double, 12UL> &currentState);
+    void stepTime(const blaze::StaticVector<double, 12UL> &currentState, const double& dt);
 
     // getter method for retrieving the dynamic actuation input profile for the tendons
     double getDynamicActuationProfile();

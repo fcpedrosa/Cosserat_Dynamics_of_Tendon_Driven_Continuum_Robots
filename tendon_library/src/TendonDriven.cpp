@@ -2,19 +2,46 @@
 
 // overloaded constructor
 template <std::size_t N, std::size_t numTendons>
-TendonDriven<N, numTendons>::TendonDriven(double E, double rad, double mass, double rho, double L, double beta, double T, double dt, double alpha, double tendonOffset, blaze::StaticVector<double, 3UL> g = {0.0, 0.0, -9.81}) : m_E(E), m_G(G), m_rad(rad), m_mass(mass), m_L(L), m_beta(beta), m_T(T), m_dt(dt), m_alpha(alpha), m_tendonOffset(tendonOffset), m_g(g)
+TendonDriven<N, numTendons>::TendonDriven(double E, double G, double rad, double mass, double L, double alpha, double T, double dt, double tendonOffset, double tendonCompliance, double basePlateToMotor, double dampBendTwist, double dampShearExt, double dragCoeff) : m_E(E), m_G(G), m_rad(rad), m_mass(mass), m_L(L), m_alpha(alpha), m_T(T), m_dt(dt)
 {
-    constexpr double area = M_PI * pow(this->m_rad, 2); // cross-sectional area
+    this->m_g = { 0.0, 0.0, -9.81 };
+	this->m_A = M_PI * pow(this->m_rad, 2); // cross-sectional area
     constexpr double I = M_PI_4 * pow(this->rad, 4);
-    this->rho = this->m_mass / (m_L * area);
-    blaze::diagonal(this->m_Kse) = {this->m_G * area, this->m_G * area, this->m_E * area};
-    blaze::diagonal(this->m_Kbt) = {this->m_E * I, this->m_E * I, 2 * this->m_G * I};
-    this->m_t = 0.0;
+    this->m_rho = this->m_mass / (this->m_L * this->m_A);
+    blaze::diagonal(this->m_Kse) = {this->m_G * this->M_A, this->m_G * this->m_A, this->m_E * this->m_A};
+    blaze::diagonal(this->m_Kbt) = { this->m_E * I, this->m_E * I, this->m_G * (I + I) };
+	blaze::diagonal(this->m_J) = { I, I, 2 * I };
+	this->m_BVPAccuracy = 1e-6;
+	this->m_solType = cosseratEquations::STATIC_SOLUTION;
+	this->m_method = rootFindingMethod::MODIFIED_NEWTON_RAPHSON;
+	this->m_tau = 0.0;
+	this->m_tendonCompliance = blaze::uniform(numTendons, tendonCompliance);
+	blaze::diagonal(this->m_Bse) = blaze::uniform(3UL, dampShearExt);
+	blaze::diagonal(this->m_Bbt) = blaze::uniform(3UL, dampBendTwist);
+	blaze::diagonal(this->m_C) = blaze::uniform(3UL, dragCoeff);
+	blaze::StaticVector<double, 3UL> v = { tendonOffset, 0.0, 0.0 };
+	this->m_tendonOffset.fill(v);
+	blaze::StaticVector<double, numTendons> angles;
+	angles = blaze::linspace<blaze::rowVector>( numTendons, 0.0, 2 * M_PI );
+	size_t idx = 0UL;
+    for (auto d : angles)
+    {
+        this->m_r[idx] = { cos(angles[idx]), sin(angles[idx]), 0.0 };
+        idx++; 
+    }
+	this->m_time = std::make_unique<timeManager>(this->m_alpha, this->m_dt);
+	this->m_ODE = std::make_unique<ODESystem>();
+	this->m_PDE = std::make_unique<PDESystem>();
 }
 
 // copy constructor
 template <std::size_t N, std::size_t numTendons>
-TendonDriven<N, numTendons>::TendonDriven(const TendonDriven &rhs) : m_E(rhs.m_E), m_rad(rhs.m_rad), m_mass(rhs.m_mass), m_rho(rhs.m_rho), m_L(rhs.m_L), m_beta(rhs.m_beta), m_T(rhs.m_T), m_dt(rhs.m_dt), m_alpha(rhs.m_alpha), m_tendonOffset(rhs.m_tendonOffset), m_g(rhs.m_g) {}
+TendonDriven<N, numTendons>::TendonDriven(const TendonDriven &rhs) : m_E(rhs.m_E), m_G(rhs.m_G), m_rad(rhs.m_rad), m_mass(rhs.m_mass), m_L(rhs.m_L), m_alpha(rhs.m_alpha), m_T(rhs.m_T), m_dt(rhs.m_dt), m_tendonOffset(rhs.m_tendonOffset), m_tendonCompliance(rhs.m_tendonCompliance), m_basePlateToMotor(rhs.m_basePlateToMotor), m_A(rhs.m_A), m_rho(rhs.m_rho), m_Kse(rhs.m_Kse), m_Kbt(rhs.m_Kbt), m_J(rhs.m_J), m_BVPAccuracy(rhs.m_BVPAccuracy), m_solType(rhs.m_solType), m_method(rhs.m_method), m_tau(rhs.m_tau), m_Bse(rhs.m_Bse), m_Bbt(rhs.m_Bbt), m_C(rhs.m_C), m_r(rhs.m_r), m_g(rhs.m_g) 
+{
+	this->m_time = std::make_unique<timeManager>(this->m_alpha, this->m_dt);
+	this->m_ODE = std::make_unique<ODESystem>();
+	this->m_PDE = std::make_unique<PDESystem>();
+}
 
 // move constructor
 template <std::size_t N, std::size_t numTendons>
@@ -24,7 +51,37 @@ TendonDriven<N, numTendons>::TendonDriven(TendonDriven &&rhs) noexcept
     if (this != &rhs)
     {
         this->m_E = rhs.m_E;
-        this->m_rad = rhs.m_rad;
+		this->m_G = rhs.m_G;
+		this->m_rad = rhs.m_rad;
+		this->m_mass = rhs.m_mass;
+		this->m_L = rhs.m_L;
+		this->m_alpha = rhs.m_alpha;
+		this->m_T = rhs.m_T;
+		this->m_dt = rhs.m_dt;
+		this->m_tendonOffset = rhs.m_tendonOffset;
+		this->m_tendonSlack = std::move(rhs.m_tendonSlack);
+		this->m_tendonCompliance = std::move(rhs.m_tendonCompliance);
+		this->m_basePlateToMotor = rhs.m_basePlateToMotor;
+		this->m_A = rhs.m_A;
+		this->m_rho = rhs.m_rho;
+		this->m_Kse = std::move(rhs.m_Kse);
+		this->m_Kbt = std::move(rhs.m_Kbt);
+		this->m_J = std::move(rhs.m_J);
+		this->m_BVPAccuracy = rhs.m_BVPAccuracy;
+		this->m_solType = rhs.m_solType;
+		this->m_method = rhs.m_method;
+		this->m_tau = std::move(rhs.m_tau);
+		this->m_Bse = std::move(rhs.m_Bse);
+		this->m_Bbt = std::move(rhs.m_Bbt);
+		this->m_C = std::move(rhs.m_C);
+		this->m_r = std::move(rhs.m_r);
+		this->m_g = std::move(rhs.m_g);
+		this->m_y = std::move(rhs.m_y);
+		this->m_z = std::move(rhs.m_z);
+		this->m_zh = std::move(rhs.m_zh);
+		this->m_time = std::move(rhs.m_time);
+		this->m_ODE = std::move(rhs.m_ODE);
+		this->m_PDE = std::move(rhs.m_PDE);
     }
 }
 
@@ -32,37 +89,138 @@ TendonDriven<N, numTendons>::TendonDriven(TendonDriven &&rhs) noexcept
 template <std::size_t N, std::size_t numTendons>
 TendonDriven<N, numTendons>::~TendonDriven()
 {
-
+	// nothing to be done
 }
 
 // copy assignment operator
 template <std::size_t N, std::size_t numTendons>
-TendonDriven<N, numTendons>::TendonDriven &operator=(const TendonDriven &rhs)
+TendonDriven<N, numTendons> &TendonDriven<N, numTendons>::operator=(const TendonDriven<N, numTendons> &rhs)
 {
+	// handling self assignment
+	if (this != &rhs)
+	{
+		this->m_E = rhs.m_E;
+		this->m_G = rhs.m_G;
+		this->m_rad = rhs.m_rad;
+		this->m_mass = rhs.m_mass;
+		this->m_L = rhs.m_L;
+		this->m_alpha = rhs.m_alpha;
+		this->m_T = rhs.m_T;
+		this->m_dt = rhs.m_dt;
+		this->m_tendonOffset = rhs.m_tendonOffset;
+		this->m_tendonSlack = rhs.m_tendonSlack;
+		this->m_tendonCompliance = rhs.m_tendonCompliance;
+		this->m_basePlateToMotor = rhs.m_basePlateToMotor;
+		this->m_A = rhs.m_A;
+		this->m_rho = rhs.m_rho;
+		this->m_Kse = rhs.m_Kse;
+		this->m_Kbt = rhs.m_Kbt;
+		this->m_J = rhs.m_J;
+		this->m_BVPAccuracy = rhs.m_BVPAccuracy;
+		this->m_solType = rhs.m_solType;
+		this->m_method = rhs.m_method;
+		this->m_tau = rhs.m_tau;
+		this->m_Bse = rhs.m_Bse;
+		this->m_Bbt = rhs.m_Bbt;
+		this->m_C = rhs.m_C;
+		this->m_r = rhs.m_r;
+		this->m_g = rhs.m_g;
+		this->m_y = rhs.m_y;
+		this->m_z = rhs.m_z;
+		this->m_zh = rhs.m_zh;
+		this->m_time = rhs.m_time;
+		this->m_ODE = rhs.m_ODE;
+		this->m_PDE = rhs.m_PDE;
+	}
 
+	return *this;
 }
 
 // move assignment operator
 template <std::size_t N, std::size_t numTendons>
-TendonDriven<N, numTendons>::TendonDriven &operator=(TendonDriven &&rhs) noexcept
+TendonDriven<N, numTendons> &TendonDriven<N, numTendons>::operator=(TendonDriven<N, numTendons> &&rhs) noexcept
 {
+	// handling self assignment
+	if (this != &rhs)
+	{
+		this->m_E = rhs.m_E;
+		this->m_G = rhs.m_G;
+		this->m_rad = rhs.m_rad;
+		this->m_mass = rhs.m_mass;
+		this->m_L = rhs.m_L;
+		this->m_alpha = rhs.m_alpha;
+		this->m_T = rhs.m_T;
+		this->m_dt = rhs.m_dt;
+		this->m_tendonOffset = rhs.m_tendonOffset;
+		this->m_tendonSlack = std::move(rhs.m_tendonSlack);
+		this->m_tendonCompliance = std::move(rhs.m_tendonCompliance);
+		this->m_basePlateToMotor = rhs.m_basePlateToMotor;
+		this->m_A = rhs.m_A;
+		this->m_rho = rhs.m_rho;
+		this->m_Kse = std::move(rhs.m_Kse);
+		this->m_Kbt = std::move(rhs.m_Kbt);
+		this->m_J = std::move(rhs.m_J);
+		this->m_BVPAccuracy = rhs.m_BVPAccuracy;
+		this->m_solType = rhs.m_solType;
+		this->m_method = rhs.m_method;
+		this->m_tau = std::move(rhs.m_tau);
+		this->m_Bse = std::move(rhs.m_Bse);
+		this->m_Bbt = std::move(rhs.m_Bbt);
+		this->m_C = std::move(rhs.m_C);
+		this->m_r = std::move(rhs.m_r);
+		this->m_g = std::move(rhs.m_g);
+		this->m_y = std::move(rhs.m_y);
+		this->m_z = std::move(rhs.m_z);
+		this->m_zh = std::move(rhs.m_zh);
+		this->m_time = std::move(rhs.m_time);
+		this->m_ODE = std::move(rhs.m_ODE);
+		this->m_PDE = std::move(rhs.m_PDE);
+	}
 
+	return *this;
 }
 
 // returns the residue (violation of boundary condition) for a particular initial guess
 template <std::size_t N, std::size_t numTendons>
 blaze::StaticVector<double, 6UL + numTendons> TendonDriven<N, numTendons>::residueFunction(const blaze::StaticVector<double, 6UL + numTendons> &initGuess)
-{
+{	
+	// initGuess := [internal force n(0), internal moment m(0), tendon_lengths]
+    blaze::StaticVector<double, 3UL> v0, u0, e3;
+    e3 = {0.0, 0.0, 1.0};
+    v0 = e3 + blaze::inv(this->m_Kse) * blaze::subvector<0UL, 3UL>(initGuess); // v = v* + K^(-1)*R^T*n
+    u0 = blaze::inv(this->m_Kbt) * *blaze::subvector<3UL, 3UL>(initGuess);     // u = u* + K^(-1)*R^T*m
+
+    // initial conditions for numerical integration
+    blaze::StaticVector<double, 19UL + numTendons> y0, dyds;
+    blaze::subvector<0UL, 19UL>(y0) = {
+        0.0, 0.0, 0.0,          // initial position
+        1.0, 0.0, 0.0, 0.0,     // initial orientation (the 1-0-0-0 quaternion yields the identity matrix)
+        v[0UL], v[1UL], v[2UL], // initial strain
+        u[0UL], u[1UL], u[2UL], // initial curvature
+        0.0, 0.0, 0.0,          // initial linear velocity q_s
+        0.0, 0.0, 0.0           // initial angular velocity w_s
+    }                           
+    blaze::subvector<20UL, numTendons>(y0) = blaze::uniform(numTendons, this->m_basePlateToMotor); // initial tendon length
+    blaze::column<0UL>(this->m_y) = y0;
+
     // initGuess := [internal force n(0), internal moment m(0), tendon_lengths]
     this->m_tau = blaze::max(blaze::subvector<6UL, numTendons>(initGuess), 0.0);          // tendon-displacement control => tau >= 0.0
     this->m_tendonSlack = -blaze::min(blaze::subvector<6UL, numTendons>(initGuess), 0.0); // tension and slack are mutually exclusive => slack < 0
 
     // Starting the numerical integration of the model equations -- Must define if Static or Dynamic solutions are to be used
-    initGuess = this->solveBVP(initGuess);
+    // numerical integration of the model equations (handles static or dynamic solutions)
+	switch (this->m_solType)
+	{
+		case cosseratEquations::STATIC_SOLUTION:
+			this->m_ODE->euler_ODE(y0, m_y, dyds, m_z, m_L, this);
+			break;
+		case cosseratEquations::DYNAMIC_SOLUTION:
+			this->m_PDE->euler_PDE(y0, m_y, dyds, m_zh, m_z, m_L, this);
+			break;
+	}
 
     // variables for computing the internal loading at the distal end (prior to final plate)
     blaze::StaticVector<double, 3UL> vL, uL, vL_t, uL_t;
-
     vL = blaze::subvector<7UL, 3UL>(blaze::column<N - 1>(this->m_y));
     uL = blaze::subvector<10UL, 3UL>(blaze::column<N - 1>(this->m_y));
 
@@ -116,8 +274,25 @@ blaze::StaticVector<double, 6UL + numTendons> TendonDriven<N, numTendons>::resid
 
 // function that computes the finite-differences Jacobian for solving the BVP
 template <std::size_t N, std::size_t numTendons>
-blaze::StaticMatrix<double, 6UL + numTendons, 6UL + numTendons> TendonDriven<N, numTendons>::jac_BVP(const blaze::StaticVector<double, 5UL> &initGuess, const blaze::StaticVector<double, 6UL + numTendons> &residue)
+blaze::StaticMatrix<double, 6UL + numTendons, 6UL + numTendons> TendonDriven<N, numTendons>::jac_BVP(const blaze::StaticVector<double, 6UL + numTendons> &initGuess, const blaze::StaticVector<double, 6UL + numTendons> &residue)
 {
+	const size_t n = 6UL + numTendons;
+	blaze::StaticMatrix<double, n, n, blaze::columnMajor> Jac_bvp;
+	blaze::StaticVector<double, n> initGuessPerturbed(initGuess), residuePerturbed; 
+	double eps = 1e-4;
+
+	for (size_t iter = 0UL; iter < n; ++iter)
+	{
+		initGuessPerturbed[iter] += eps;
+		// perturbed residue
+		residuePerturbed = this->residueFunction(initGuessPerturbed);
+		// building the finite-differences Residue jacobian
+		blaze::column(jac_bvp, iter) = (residuePerturbed - residue) / eps;
+		// restoring the original value of the array
+		initGuessPerturbed[iter] = initGuess[iter];
+	}
+
+	return jac_bvp;
 }
 
 // function that computes the finite-differences Jacobian wrt actuation inputs
@@ -130,36 +305,28 @@ blaze::StaticMatrix<double, 3UL, 6UL> TendonDriven<N, numTendons>::jacobian(cons
 template <std::size_t N, std::size_t numTendons>
 bool TendonDriven<N, numTendons>::solveBVP(blaze::StaticVector<double, 6UL + numTendons> &initGuess)
 {
-	// initGuess := [internal force n(0), internal moment m(0), tendon_lengths]
-    blaze::StaticVector<double, 3UL> v0, u0, e3;
-    e3 = {0.0, 0.0, 1.0};
-    v0 = e3 + blaze::inv(this->m_Kse) * blaze::subvector<0UL, 3UL>(initGuess); // v = v* + K^(-1)*R^T*n
-    u0 = blaze::inv(this->m_Kbt) * *blaze::subvector<3UL, 3UL>(initGuess);     // u = u* + K^(-1)*R^T*m
+	bool convergence; // flags the convergence (or lack thereof) of the selected nonlinear root-finding method
 
-    // initial conditions for numerical integration
-    blaze::StaticVector<double, 19UL + numTendons> y0, dyds;
-    blaze::subvector<0UL, 19UL>(y0) = {
-        0.0, 0.0, 0.0,          // initial position
-        1.0, 0.0, 0.0, 0.0,     // initial orientation (the 1-0-0-0 quaternion yields the identity matrix)
-        v[0UL], v[1UL], v[2UL], // initial strain
-        u[0UL], u[1UL], u[2UL], // initial curvature
-        0.0, 0.0, 0.0,          // initial linear velocity q_s
-        0.0, 0.0, 0.0           // initial angular velocity w_s
-    }                           
-    blaze::subvector<20UL, numTendons>(y0) = blaze::uniform(numTendons, this->m_basePlateToMotor); // initial tendon length
-    blaze::column<0UL>(this->m_y) = y0;
-
-	// numerical integration of the model equations (handles static or dynamic solutions)
-	switch (this->m_solType)
+	switch (this->m_method)
 	{
-		case cosseratEquations::STATIC_SOLUTION:
-			this->m_ODE->euler_ODE(y0, m_y, dyds, m_z, m_L, this);
+		case rootFindingMethod::POWELL_DOG_LEG:
+			convergence = this->PowellDogLeg(initGuess);
 			break;
-		case cosseratEquations::DYNAMIC_SOLUTION:
-			this->m_PDE->euler_PDE(y0, m_y, dyds, m_zh, m_z, m_L, this);
+		case rootFindingMethod::LEVENBERG_MARQUARDT:
+			convergence = this->Levenberg_Marquardt(initGuess);
+			break;
+		case rootFindingMethod::BROYDEN:
+			convergence = this->Broyden(initGuess);
+			break;
+		case rootFindingMethod::NEWTON_RAPHSON:
+			convergence = this->Newton_Raphson(initGuess);
+			break;
+		case rootFindingMethod::MODIFIED_NEWTON_RAPHSON:
+			convergence = this->Modified_Newton_Raphson(initGuess);
 			break;
 	}
 
+	return convergrnce;
 }
 
 // function that implements Powell's Dog Leg Method (Nonlinear root-finding method for solving the BVP)
@@ -545,7 +712,7 @@ bool TendonDriven<N, numTendons>::Modified_Newton_Raphson(blaze::StaticVector<do
 
 // method for computing the Penrose Pseudoinverse via SVD decomposition
 template <std::size_t N, std::size_t numTendons>
-blaze::HybridMatrix<double, 6UL, 6UL> TendonDriven<N, numTendons>::pInv(const blaze::HybridMatrix<double, 6UL + numTendons, 6UL + numTendons> &M)
+blaze::HybridMatrix<double, 6UL + numTendons, 6UL + numTendons> TendonDriven<N, numTendons>::pInv(const blaze::HybridMatrix<double, 6UL + numTendons, 6UL + numTendons> &M)
 {
     // declaring the auxiliary matrices for pInv computation
     blaze::HybridMatrix<double, 6UL + numTendons, 6UL + numTendons> U; // The matrix for the left singular vectors
